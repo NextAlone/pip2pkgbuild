@@ -5,6 +5,7 @@
 from __future__ import unicode_literals
 
 import argparse
+from ctypes import LittleEndianStructure
 import json
 import logging
 import os
@@ -338,9 +339,12 @@ class PyModule(object):
             LOG.warning("Package source not found, you need to add it by yourself and regenerate checksum")
             return {}
 
+        if self.nobuild:
+            return search_in_iter(urls,
+                                  lambda l: dict_get(l, 'url', '').endswith('.whl'))
         info = search_in_iter(urls,
                               lambda l: dict_get(l, 'url', '').endswith('.tar.gz'))
-        if info is None or self.nobuild:
+        if info is None:
             info = search_in_iter(urls,
                                   lambda l: not dict_get(l, 'url', '').endswith('.whl'))
         if info is None:
