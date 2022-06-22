@@ -528,7 +528,7 @@ class Packager(object):
         else:
             license_command = ''
 
-        build_fun = None if self.nobuild else self._gen_build_func(self.python)
+        build_fun = '' if self.nobuild else self._gen_build_func(self.python)
 
         if self.python == 'multi':
             packaging_steps = join_nonempty([
