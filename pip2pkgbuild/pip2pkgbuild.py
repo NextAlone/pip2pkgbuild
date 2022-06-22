@@ -329,8 +329,7 @@ class PyModule(object):
                     license_ = 'custom:{}'.format(license_str)
         return license_
 
-    @staticmethod
-    def _get_src_info(urls):
+    def _get_src_info(self, urls):
         """
         :type urls: list[dict]
         :rtype: dict
@@ -341,7 +340,7 @@ class PyModule(object):
 
         info = search_in_iter(urls,
                               lambda l: dict_get(l, 'url', '').endswith('.tar.gz'))
-        if info is None:
+        if info is None or self.nobuild:
             info = search_in_iter(urls,
                                   lambda l: not dict_get(l, 'url', '').endswith('.whl'))
         if info is None:
