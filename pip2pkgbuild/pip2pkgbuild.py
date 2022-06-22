@@ -596,7 +596,7 @@ def fetch_pymodule(name, version, find_license=False, pep517=False, nobuild=Fals
             raise PythonModuleNotFoundError("{}".format(name))
         else:
             raise e
-    return PyModule(info, find_license, pep517)
+    return PyModule(info, find_license, pep517, nobuild)
 
 
 def main():
