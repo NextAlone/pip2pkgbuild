@@ -15,8 +15,8 @@ setup(
     description=META['description'],
     long_description=long_description,
 
-    url='https://github.com/wenLiangcan/pip2pkgbuild',
-    author='wenLiangcan',
+    url='https://github.com/NextAlone/pip2pkgbuild',
+    author='NextAlone',
     author_email='boxeed@gmail.com',
     license='MIT',
     platforms='any',
