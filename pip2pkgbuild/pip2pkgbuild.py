@@ -56,6 +56,8 @@ sha256sums=('{checksums}')
 
 SOURCE_TARGZ = "https://files.pythonhosted.org/packages/source/${_module::1}/$_module/$_module-$pkgver.tar.gz"
 
+DIST_TARGS = "https://files.pythonhosted.org/packages/py3/${_module::1}/$_module/${_module//-/_}-$pkgver-py3-none-any.whl"
+
 PREPARE_FUNC = """\
 prepare() {
     cp -a "${srcdir}/${_module}-${pkgver}"{,-python2}
@@ -80,16 +82,20 @@ INSTALL_LICENSE = '''\
     install -D -m644 {license_path} "${{{{pkgdir}}}}/usr/share/licenses/{{py_pkgname}}/{license_name}"'''
 
 INSTALL_STATEMENT = '''\
+    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
     {python} -m installer --destdir="${{pkgdir}}" dist/*.whl'''
 
 INSTALL_STATEMENT_OLD = '''\
+    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
     {python} setup.py install --root="${{pkgdir}}" --optimize=1 --skip-build'''
+
+INSTALL_STATEMENT_WHL = '''\
+    {python} -m installer --destdir="${{pkgdir}}" *.whl'''
 
 PACKAGE_FUNC = """\
 package{sub_pkgname}() {{
     depends+=({depends})
-    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
-{packaging_steps}
+    {packaging_steps}
 }}
 """
 
@@ -155,7 +161,7 @@ class ParseModuleInfoError(Exception):
 
 
 class PyModule(object):
-    def __init__(self, json_data, find_license=False, pep517=False):
+    def __init__(self, json_data, find_license=False, pep517=False, nobuild=False):
         """
         :type json_data: dict
         :type find_license: bool
@@ -175,11 +181,13 @@ class PyModule(object):
             self.checksums = dict_get(src_info.get('digests', {}), 'sha256', '')
             self.license_path = None
             self.pep517 = False
+            self.nobuild = nobuild
             if find_license or pep517:
                 compressed_source = self._download_source(source_url)
                 if find_license:
                     self.license_path = self._find_license_path(compressed_source)
-                self.pep517 = pep517 and self._is_pep517_module(compressed_source)
+                if not self.nobuild:
+                    self.pep517 = pep517 and self._is_pep517_module(compressed_source)
         except KeyError as e:
             raise ParseModuleInfoError(e)
 
@@ -408,6 +416,7 @@ class Packager(object):
         self.name = name
         self.email = email
         self.pep517 = module.pep517
+        self.nobuild = module.nobuild
 
         self.python = 'python2' if sys.version_info.major == 2 else 'python'
         if python in ['python', 'python2', 'multi']:
@@ -447,7 +456,7 @@ class Packager(object):
             self.pkgname[0] if len(self.pkgname) == 1 else self.py_pkgname)
 
     def _get_mkdepends(self):
-        modules = ['build', 'installer'] if self.pep517 else ['setuptools']
+        modules = ['build', 'installer'] if self.pep517 else ['setuptools'] if self.nobuild else ['installer']
         if self.python == 'multi':
             versions = ['', '2']
         elif self.python == 'python2':
@@ -466,7 +475,7 @@ class Packager(object):
                 suffix = '-python2'
             else:
                 suffix = ''
-            return (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD).format(
+            return (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD if self.nobuild else '').format(
                 suffix=suffix,
                 python=py
             )
@@ -507,7 +516,7 @@ class Packager(object):
 
         pkgbuild.append(headers)
 
-        install_template = INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD
+        install_template = INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD if self.nobuild else INSTALL_STATEMENT_WHL
         if self.module.license_path:
             license_path = self.module.license_path
             license_command = INSTALL_LICENSE.format(
@@ -559,7 +568,7 @@ class Packager(object):
         return '\n'.join(pkgbuild)
 
 
-def fetch_pymodule(name, version, find_license=False, pep517=False):
+def fetch_pymodule(name, version, find_license=False, pep517=False, nobuild=False):
     """
     :type name: str
     :type version: str
@@ -644,7 +653,8 @@ def main():
                            help="Your email for the package maintainer line")
     argparser.add_argument('--pep517', dest='pep517', action='store_true', default=False,
                            help='Prefer PEP517 based installation method if supporting by the module')
-
+    argparser.add_argument('--nobuild', dest='nobuild', action='store_true', default=False,
+                           help='Do not build the source, only install prebuilt package')
     args = argparser.parse_args()
 
     if bool(args.email) != bool(args.name):
@@ -654,7 +664,8 @@ def main():
     try:
         module = fetch_pymodule(args.module, args.module_version,
                                 args.find_license,
-                                args.pep517)
+                                args.pep517,
+                                args.nobuild)
     except PythonModuleNotFoundError as e:
         LOG.error("Python module not found: {}".format(e))
         sys.exit(0)
@@ -677,7 +688,7 @@ def main():
         return opts
 
     opts = get_options(
-        args, ['module', 'module_version', 'print_out', 'find_license', 'pep517'])
+        args, ['module', 'module_version', 'print_out', 'find_license', 'pep517', 'nobuild'])
     packager = Packager(module, **opts)
     pkgbuild = packager.generate()
 
