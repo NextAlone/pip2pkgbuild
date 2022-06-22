@@ -175,9 +175,9 @@ class PyModule(object):
             self.pkgdesc = info['summary']
             self.url = info['home_page']
             self.license = self._get_license(info)
+            self.nobuild = nobuild
             src_info = self._get_src_info(json_data['urls'])
             source_url = dict_get(src_info, 'url', '')
-            self.nobuild = nobuild
             self.source = self._get_source(source_url)
             self.checksums = dict_get(src_info.get('digests', {}), 'sha256', '')
             self.license_path = None
