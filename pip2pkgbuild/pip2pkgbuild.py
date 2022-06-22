@@ -177,11 +177,11 @@ class PyModule(object):
             self.license = self._get_license(info)
             src_info = self._get_src_info(json_data['urls'])
             source_url = dict_get(src_info, 'url', '')
+            self.nobuild = nobuild
             self.source = self._get_source(source_url)
             self.checksums = dict_get(src_info.get('digests', {}), 'sha256', '')
             self.license_path = None
             self.pep517 = False
-            self.nobuild = nobuild
             if find_license or pep517:
                 compressed_source = self._download_source(source_url)
                 if find_license:
@@ -353,7 +353,9 @@ class PyModule(object):
         :type url: str
         :rtype: str
         """
-        if url.endswith('.tar.gz'):
+        if self.nobuild:
+            l = DIST_TARGS
+        elif url.endswith('.tar.gz'):
             l = SOURCE_TARGZ
         else:
             l = url.replace(self.pkgver, "${pkgver}")
