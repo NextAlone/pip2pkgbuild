@@ -72,25 +72,25 @@ build() {{
 
 BUILD_STATEMENTS = """\
     cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
-    {python} -m build --wheel --no-isolation"""
+{python} -m build --wheel --no-isolation"""
 
 BUILD_STATEMENTS_OLD = """\
     cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
-    {python} setup.py build"""
+{python} setup.py build"""
 
 INSTALL_LICENSE = '''\
     install -D -m644 {license_path} "${{{{pkgdir}}}}/usr/share/licenses/{{py_pkgname}}/{license_name}"'''
 
 INSTALL_STATEMENT = '''\
     cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
-    {python} -m installer --destdir="${{pkgdir}}" dist/*.whl'''
+{python} -m installer --destdir="${{pkgdir}}" dist/*.whl'''
 
 INSTALL_STATEMENT_OLD = '''\
     cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
-    {python} setup.py install --root="${{pkgdir}}" --optimize=1 --skip-build'''
+{python} setup.py install --root="${{pkgdir}}" --optimize=1 --skip-build'''
 
 INSTALL_STATEMENT_WHL = '''\
-    {python} -m installer --destdir="${{pkgdir}}" *.whl'''
+{python} -m installer --destdir="${{pkgdir}}" *.whl'''
 
 PACKAGE_FUNC = """\
 package{sub_pkgname}() {{
@@ -477,7 +477,7 @@ class Packager(object):
                 suffix = '-python2'
             else:
                 suffix = ''
-            return '' if self.nobuild else (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD).format(
+            return (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD).format(
                 suffix=suffix,
                 python=py
             )
@@ -528,7 +528,7 @@ class Packager(object):
         else:
             license_command = ''
 
-        build_fun = self._gen_build_func(self.python)
+        build_fun = None if self.nobuild else self._gen_build_func(self.python)
 
         if self.python == 'multi':
             packaging_steps = join_nonempty([
