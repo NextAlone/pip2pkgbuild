@@ -458,7 +458,7 @@ class Packager(object):
             self.pkgname[0] if len(self.pkgname) == 1 else self.py_pkgname)
 
     def _get_mkdepends(self):
-        modules = ['build', 'installer'] if self.pep517 else ['setuptools'] if self.nobuild else ['installer']
+        modules = ['installer'] if self.nobuild else ['build', 'installer'] if self.pep517 else ['setuptools']
         if self.python == 'multi':
             versions = ['', '2']
         elif self.python == 'python2':
@@ -477,7 +477,7 @@ class Packager(object):
                 suffix = '-python2'
             else:
                 suffix = ''
-            return (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD if self.nobuild else '').format(
+            return '' if self.nobuild else (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD).format(
                 suffix=suffix,
                 python=py
             )
@@ -518,7 +518,7 @@ class Packager(object):
 
         pkgbuild.append(headers)
 
-        install_template = INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD if self.nobuild else INSTALL_STATEMENT_WHL
+        install_template = INSTALL_STATEMENT_WHL if self.nobuild else INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD
         if self.module.license_path:
             license_path = self.module.license_path
             license_command = INSTALL_LICENSE.format(
