@@ -14,13 +14,10 @@ import sys
 import tarfile
 import zipfile
 
-if sys.version_info.major == 2:
-    from cStringIO import StringIO as BytesIO
-    from urllib2 import urlopen, HTTPError
-else:
-    from io import BytesIO
-    from urllib.request import urlopen
-    from urllib.error import HTTPError
+
+from io import BytesIO
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 META = {
     'name': 'pip2pkgbuild',
@@ -61,7 +58,7 @@ DIST_TARGS = "https://files.pythonhosted.org/packages/py3/${_module::1}/$_module
 
 PREPARE_FUNC = """\
 prepare() {
-    cp -a "${srcdir}/${_module}-${pkgver}"{,-python2}
+    cp -a "${srcdir}/${_module}-${pkgver}"
 }
 """
 
@@ -72,22 +69,22 @@ build() {{
 """
 
 BUILD_STATEMENTS = """\
-    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
+    cd "${{srcdir}}/${{_module}}-${{pkgver}}"
 {python} -m build --wheel --no-isolation"""
 
 BUILD_STATEMENTS_OLD = """\
-    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
+    cd "${{srcdir}}/${{_module}}-${{pkgver}}"
 {python} setup.py build"""
 
 INSTALL_LICENSE = '''\
     install -D -m644 {license_path} "${{{{pkgdir}}}}/usr/share/licenses/{{py_pkgname}}/{license_name}"'''
 
 INSTALL_STATEMENT = '''\
-    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
+    cd "${{srcdir}}/${{_module}}-${{pkgver}}"
 {python} -m installer --destdir="${{pkgdir}}" dist/*.whl'''
 
 INSTALL_STATEMENT_OLD = '''\
-    cd "${{srcdir}}/${{_module}}-${{pkgver}}{suffix}"
+    cd "${{srcdir}}/${{_module}}-${{pkgver}}"
 {python} setup.py install --root="${{pkgdir}}" --optimize=1 --skip-build'''
 
 INSTALL_STATEMENT_WHL = '''\
@@ -401,15 +398,12 @@ class CompressedFacade(object):
 
 class Packager(object):
 
-    def __init__(self, module, python=None, depends=None, py2_depends=None,
-                 py3_depends=None, mkdepends=None, pkgbase=None, pkgname=None,
-                 py2_pkgname=None, email=None, name=None):
+    def __init__(self, module, python=None, depends=None, mkdepends=None, pkgbase=None, pkgname=None,
+                 email=None, name=None):
         """
         :type module: PyModule
         :type python: str
         :type depends: list[str]
-        :type py2_depends: list[str]
-        :type py3_depends: list[str]
         :type mkdepends: list[str]
         :type pkgbase: str
         :type pkgname: str
@@ -423,33 +417,18 @@ class Packager(object):
         self.pep517 = module.pep517
         self.nobuild = module.nobuild
 
-        self.python = 'python2' if sys.version_info.major == 2 else 'python'
-        if python in ['python', 'python2', 'multi']:
-            self.python = python
+        self.python = 'python'
 
         python_pkgname = 'python-{}'.format(module.name)
-        python2_pkgname = 'python2-{}'.format(module.name)
 
         self.py_pkgname = pkgname or python_pkgname
-        self.py2_pkgname = py2_pkgname or python2_pkgname
 
         self.depends = []
-        self.py2_depends = ['python2']
-        self.py3_depends = ['python']
         self.mkdepends = []
 
-        if self.python == 'multi':
-            self.pkgname = [self.py_pkgname, self.py2_pkgname]
-            if py2_depends:
-                self.py2_depends += py2_depends
-            if py3_depends:
-                self.py3_depends += py3_depends
-        elif self.python == 'python2':
-            self.pkgname = [self.py2_pkgname]
-            self.depends += ['python2']
-        elif self.python == 'python':
-            self.pkgname = [self.py_pkgname]
-            self.depends += ['python']
+
+        self.pkgname = [self.py_pkgname]
+        self.depends += ['python']
         self.mkdepends += self._get_mkdepends()
 
         if depends:
@@ -462,33 +441,18 @@ class Packager(object):
 
     def _get_mkdepends(self):
         modules = ['installer'] if self.nobuild else ['build', 'installer'] if self.pep517 else ['setuptools']
-        if self.python == 'multi':
-            versions = ['', '2']
-        elif self.python == 'python2':
-            versions = ['2']
-        elif self.python == 'python':
-            versions = ['']
         mkdepends = []
         for m in modules:
-            for v in versions:
-                mkdepends.append('python' + v + '-' + m)
+            mkdepends.append('python' + '-' + m)
         return mkdepends
 
     def _gen_build_func(self, python):
         def gen_statements(py):
-            if python == 'multi' and py == 'python2':
-                suffix = '-python2'
-            else:
-                suffix = ''
             return (BUILD_STATEMENTS if self.pep517 else BUILD_STATEMENTS_OLD).format(
-                suffix=suffix,
                 python=py
             )
 
-        if python == 'multi':
-            pylist = ['python', 'python2']
-        else:
-            pylist = [python]
+        pylist = [python]
 
         return BUILD_FUNC.format(
             statements='\n\n'.join(map(gen_statements, pylist))
@@ -521,7 +485,7 @@ class Packager(object):
 
         pkgbuild.append(headers)
 
-        install_template = INSTALL_STATEMENT_WHL if self.nobuild else INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD
+        install_template = INSTALL_STATEMENT_WHL if self.nobuild else (INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD)
         if self.module.license_path:
             license_path = self.module.license_path
             license_command = INSTALL_LICENSE.format(
@@ -533,42 +497,16 @@ class Packager(object):
 
         build_fun = '' if self.nobuild else self._gen_build_func(self.python)
 
-        if self.python == 'multi':
-            packaging_steps = join_nonempty([
-                license_command.format(py_pkgname=self.py_pkgname),
-                install_template.format(python='python')
-            ])
-            package_func = PACKAGE_FUNC.format(
-                sub_pkgname='_'+self.py_pkgname,
-                depends=iter_to_str(self.py3_depends),
-                suffix='',
-                packaging_steps=packaging_steps
-            )
-
-            py2_packaging_steps = join_nonempty([
-                license_command.format(py_pkgname=self.py2_pkgname),
-                install_template.format(python='python2')
-            ])
-            py2_package_func = PACKAGE_FUNC.format(
-                sub_pkgname='_'+self.py2_pkgname,
-                depends=iter_to_str(self.py2_depends),
-                suffix='-python2',
-                packaging_steps=py2_packaging_steps
-            )
-
-            pkgbuild += [PREPARE_FUNC, build_fun, package_func, py2_package_func]
-        else:
-            packaging_steps = join_nonempty([
-                license_command.format(py_pkgname=self.pkgname[0]),
-                install_template.format(python=self.python)
-            ])
-            package_func = PACKAGE_FUNC.format(
-                sub_pkgname='',
-                depends='',
-                suffix='',
-                packaging_steps=packaging_steps
-            )
-            pkgbuild += [build_fun, package_func]
+        packaging_steps = join_nonempty([
+            license_command.format(py_pkgname=self.pkgname[0]),
+            install_template.format(python=self.python)
+        ])
+        package_func = PACKAGE_FUNC.format(
+            sub_pkgname='',
+            depends='',
+            packaging_steps=packaging_steps
+        )
+        pkgbuild += [build_fun, package_func]
 
         return '\n'.join(pkgbuild)
 
@@ -610,10 +548,6 @@ def main():
     argparser.add_argument('-v', '--module-version',
                            default='',
                            help="Use the specified version of the Python module")
-    argparser.add_argument('-p', '--python-version',
-                           choices=['python', 'python2', 'multi'],
-                           dest='python',
-                           help='The Python version on which the PKGBUILD bases')
     argparser.add_argument('-b', '--package-basename',
                            type=str,
                            dest='pkgbase',
@@ -622,23 +556,9 @@ def main():
                            type=str,
                            dest='pkgname',
                            help='Specify the pkgname value or the name for the Python 3 based package in a package group')
-    argparser.add_argument('--python2-package-name',
-                           type=str,
-                           dest='py2_pkgname',
-                           help='Specify the name for the Python 2 based package in a package group')
     argparser.add_argument('-d', '--depends',
                            type=str, default=[], nargs='*',
                            help='Dependencies for the whole PKGBUILD')
-    argparser.add_argument('--python2-depends',
-                           dest='py2_depends',
-                           metavar='DEPENDS',
-                           type=str, default=[], nargs='*',
-                           help='Dependencies for the Python 2 based package in a package group')
-    argparser.add_argument('--python3-depends',
-                           dest='py3_depends',
-                           metavar='DEPENDS',
-                           type=str, default=[], nargs='*',
-                           help='Dependencies for the Python 3 based package in a package group')
     argparser.add_argument('-m', '--make-depends',
                            dest='mkdepends',
                            type=str, default=[], nargs='*',
@@ -707,4 +627,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
