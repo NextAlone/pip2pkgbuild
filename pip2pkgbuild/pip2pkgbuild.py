@@ -1,11 +1,7 @@
 #!/usr/bin/python
 
-# json returns unicode strings
-# which causes problems for `dict_get` in python2
-from __future__ import unicode_literals
 
 import argparse
-from ctypes import LittleEndianStructure
 import json
 import logging
 import os
@@ -164,6 +160,7 @@ class PyModule(object):
         :type json_data: dict
         :type find_license: bool
         :type pep517: bool
+        :type nobuild: bool
         """
         try:
             info = json_data['info']
@@ -177,15 +174,18 @@ class PyModule(object):
             src_info = self._get_src_info(json_data['urls'])
             source_url = dict_get(src_info, 'url', '')
             self.source = self._get_source(source_url)
-            self.checksums = dict_get(src_info.get('digests', {}), 'sha256', '')
+            self.checksums = dict_get(
+                src_info.get('digests', {}), 'sha256', '')
             self.license_path = None
             self.pep517 = False
             if find_license or pep517:
                 compressed_source = self._download_source(source_url)
                 if find_license:
-                    self.license_path = self._find_license_path(compressed_source)
+                    self.license_path = self._find_license_path(
+                        compressed_source)
                 if not self.nobuild:
-                    self.pep517 = pep517 and self._is_pep517_module(compressed_source)
+                    self.pep517 = pep517 and self._is_pep517_module(
+                        compressed_source)
         except KeyError as e:
             raise ParseModuleInfoError(e)
 
@@ -229,7 +229,7 @@ class PyModule(object):
         return compressed_facade
 
     @staticmethod
-    def _search_compressed_fille(compressed_source, match):
+    def _search_compressed_file(compressed_source, match):
         """Shallow depth first sarching in compressed file
 
         :type compressed_source: CompressedFacade
@@ -263,8 +263,8 @@ class PyModule(object):
         """
         def contains_toml(file_path):
             return file_path.endswith('pyproject.toml')
-        if self._search_compressed_fille(
-          compressed_source, contains_toml) is True:
+        if self._search_compressed_file(
+                compressed_source, contains_toml) is True:
             return True
         else:
             LOG.warning(self.module + " is not a PEP517 based module.")
@@ -282,6 +282,7 @@ class PyModule(object):
         # LICENSES.txt
         # license
         find_license = re.compile(".*/LICENSES?(?:\.(txt|rst|md)|)$")
+
         def match_license(file_path):
             """
             :type file_path: str
@@ -294,7 +295,7 @@ class PyModule(object):
                 return ''.join(match.group(0).split('/')[1:])
             return None
 
-        match = self._search_compressed_fille(compressed_source, match_license)
+        match = self._search_compressed_file(compressed_source, match_license)
         if match is None:
             LOG.warning("Could not find license file.")
         return match
@@ -333,7 +334,8 @@ class PyModule(object):
         :rtype: dict
         """
         if len(urls) == 0:
-            LOG.warning("Package source not found, you need to add it by yourself and regenerate checksum")
+            LOG.warning(
+                "Package source not found, you need to add it by yourself and regenerate checksum")
             return {}
 
         if self.nobuild:
@@ -359,6 +361,8 @@ class PyModule(object):
             l = SOURCE_TARGZ
         else:
             l = url.replace(self.pkgver, "${pkgver}")
+            if l.endswith(".whl"):
+                self.nobuild = True
         return l
 
 
@@ -407,7 +411,6 @@ class Packager(object):
         :type mkdepends: list[str]
         :type pkgbase: str
         :type pkgname: str
-        :type py2_pkgname: str
         :type name: str
         :type email: str
         """
@@ -426,7 +429,6 @@ class Packager(object):
         self.depends = []
         self.mkdepends = []
 
-
         self.pkgname = [self.py_pkgname]
         self.depends += ['python']
         self.mkdepends += self._get_mkdepends()
@@ -440,7 +442,8 @@ class Packager(object):
             self.pkgname[0] if len(self.pkgname) == 1 else self.py_pkgname)
 
     def _get_mkdepends(self):
-        modules = ['installer'] if self.nobuild else ['build', 'installer'] if self.pep517 else ['setuptools']
+        modules = ['installer'] if self.nobuild else [
+            'build', 'installer'] if self.pep517 else ['setuptools']
         mkdepends = []
         for m in modules:
             mkdepends.append('python' + '-' + m)
@@ -485,7 +488,8 @@ class Packager(object):
 
         pkgbuild.append(headers)
 
-        install_template = INSTALL_STATEMENT_WHL if self.nobuild else (INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD)
+        install_template = INSTALL_STATEMENT_WHL if self.nobuild else (
+            INSTALL_STATEMENT if self.pep517 else INSTALL_STATEMENT_OLD)
         if self.module.license_path:
             license_path = self.module.license_path
             license_command = INSTALL_LICENSE.format(
@@ -517,6 +521,7 @@ def fetch_pymodule(name, version, find_license=False, pep517=False, nobuild=Fals
     :type version: str
     :type find_license: bool
     :type pep517: bool
+    :type nobuild: bool
     :rtype: PyModule
     """
     def fetch_json(url):
@@ -527,7 +532,8 @@ def fetch_pymodule(name, version, find_license=False, pep517=False, nobuild=Fals
         info = fetch_json(url)
         if version:
             if info['releases'].get(version) is None:
-                raise PythonModuleVersionNotFoundError("{} {}".format(name, version))
+                raise PythonModuleVersionNotFoundError(
+                    "{} {}".format(name, version))
             else:
                 url = VERSION_MODULE_JSON.format(name=name, version=version)
                 info = fetch_json(url)
@@ -551,12 +557,13 @@ def main():
     argparser.add_argument('-b', '--package-basename',
                            type=str,
                            dest='pkgbase',
-                           help='Specifiy the pkgbase value, the first value in the pkgname array is used by default')
+                           help='Specify the pkgbase value, the first value in the pkgname array is used by default')
     argparser.add_argument('-n', '--package-name',
                            type=str,
                            dest='pkgname',
                            help='Specify the pkgname value or the name for the Python 3 based package in a package group')
     argparser.add_argument('-d', '--depends',
+                           dest='depends',
                            type=str, default=[], nargs='*',
                            help='Dependencies for the whole PKGBUILD')
     argparser.add_argument('-m', '--make-depends',
